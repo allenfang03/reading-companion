@@ -12,14 +12,9 @@ function App() {
   const [books, setBooks] = useState([]);
   const [error, setError] = useState(null);
 
-  // Check for existing session on load
+  // Always start fresh - no session restoration
   useEffect(() => {
-    const savedToken = localStorage.getItem('session_token');
-    if (savedToken) {
-      loadSession(savedToken);
-    } else {
-      loadBooks();
-    }
+    loadBooks();
   }, []);
 
   async function loadBooks() {
