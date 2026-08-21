@@ -10,8 +10,7 @@ CREATE TABLE IF NOT EXISTS books (
   user_id TEXT NOT NULL,
   title TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  is_indexed BOOLEAN DEFAULT FALSE,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  is_indexed BOOLEAN DEFAULT FALSE
 );
 
 CREATE INDEX IF NOT EXISTS idx_books_user ON books(user_id);
@@ -36,9 +35,7 @@ CREATE TABLE IF NOT EXISTS mentions (
   character_name TEXT NOT NULL,
   chapter_index INTEGER NOT NULL,
   offset INTEGER NOT NULL,
-  context_snippet TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+  context_snippet TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_mentions_lookup ON mentions(user_id, book_id, character_name, chapter_index, offset);
@@ -50,9 +47,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   book_id INTEGER NOT NULL UNIQUE,
   current_chapter_index INTEGER NOT NULL DEFAULT 0,
   current_offset INTEGER NOT NULL DEFAULT 0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
@@ -66,8 +61,6 @@ CREATE TABLE IF NOT EXISTS recap_cache (
   offset_bucket INTEGER NOT NULL,
   llm_response TEXT NOT NULL,
   cached_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE,
   UNIQUE(user_id, book_id, chapter_index, offset_bucket)
 );
 
