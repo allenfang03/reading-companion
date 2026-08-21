@@ -3,6 +3,10 @@ from typing import Optional, List
 from datetime import datetime
 
 
+class UserResponse(BaseModel):
+    id: str
+
+
 class BookBase(BaseModel):
     title: str
 

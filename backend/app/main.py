@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 import logging
 
 from app.database import init_db
-from app.routers import books, sessions, recap, character
+from app.routers import books, sessions, recap, character, users
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -43,6 +43,7 @@ app.include_router(books.router)
 app.include_router(sessions.router)
 app.include_router(recap.router)
 app.include_router(character.router)
+app.include_router(users.router)
 
 
 @app.get("/")

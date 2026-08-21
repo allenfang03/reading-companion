@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from app.database import get_db
 from app.models.schemas import (
     SetPositionRequest, SetPositionResponse, 
@@ -11,8 +11,17 @@ import aiosqlite
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
+async def ensure_user_exists(db, user_id: str):
+    """Create user if they don't exist."""
+    await db.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (user_id,))
+    await db.commit()
+
+
 @router.post("/set-position", response_model=SetPositionResponse)
-async def set_position(request: SetPositionRequest):
+async def set_position(
+    request: SetPositionRequest,
+    user_id: str = Query(..., description="User ID for session isolation")
+):
     """
     Set the reader's current position in a book.
     
@@ -32,10 +41,13 @@ async def set_position(request: SetPositionRequest):
         )
     
     async with get_db() as db:
-        # Check book exists
+        # Ensure user exists
+        await ensure_user_exists(db, user_id)
+        
+        # Check book exists and belongs to user
         cursor = await db.execute(
-            "SELECT id, title FROM books WHERE id = ?",
-            (request.book_id,)
+            "SELECT id, title FROM books WHERE id = ? AND user_id = ?",
+            (request.book_id, user_id)
         )
         book = await cursor.fetchone()
         
@@ -106,10 +118,10 @@ async def set_position(request: SetPositionRequest):
         # Upsert session
         session_token = str(uuid.uuid4())
         
-        # Check if session exists
+        # Check if session exists for this user and book
         cursor = await db.execute(
-            "SELECT session_token FROM sessions WHERE book_id = ?",
-            (request.book_id,)
+            "SELECT session_token FROM sessions WHERE book_id = ? AND user_id = ?",
+            (request.book_id, user_id)
         )
         existing = await cursor.fetchone()
         
@@ -123,9 +135,9 @@ async def set_position(request: SetPositionRequest):
             )
         else:
             await db.execute(
-                """INSERT INTO sessions (session_token, book_id, current_chapter_index, current_offset)
-                   VALUES (?, ?, ?, ?)""",
-                (session_token, request.book_id, chapter_index, offset)
+                """INSERT INTO sessions (session_token, user_id, book_id, current_chapter_index, current_offset)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (session_token, user_id, request.book_id, chapter_index, offset)
             )
         
         await db.commit()
@@ -140,7 +152,10 @@ async def set_position(request: SetPositionRequest):
 
 
 @router.get("/{session_token}", response_model=SessionResponse)
-async def get_session(session_token: str):
+async def get_session(
+    session_token: str,
+    user_id: str = Query(..., description="User ID for session isolation")
+):
     """Get session by token for rehydration."""
     async with get_db() as db:
         cursor = await db.execute(
@@ -148,8 +163,8 @@ async def get_session(session_token: str):
                       s.current_offset, b.title, b.is_indexed
                FROM sessions s
                JOIN books b ON s.book_id = b.id
-               WHERE s.session_token = ?""",
-            (session_token,)
+               WHERE s.session_token = ? AND s.user_id = ?""",
+            (session_token, user_id)
         )
         row = await cursor.fetchone()
         

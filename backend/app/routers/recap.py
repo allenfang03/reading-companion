@@ -9,7 +9,10 @@ router = APIRouter(prefix="/recap", tags=["recap"])
 
 
 @router.get("", response_model=RecapResponse)
-async def get_recap(session_token: str = Query(..., description="Session token")):
+async def get_recap(
+    session_token: str = Query(..., description="Session token"),
+    user_id: str = Query(..., description="User ID for isolation")
+):
     """
     Get a recap of events since the reader last read.
     
@@ -22,8 +25,8 @@ async def get_recap(session_token: str = Query(..., description="Session token")
         cursor = await db.execute(
             """SELECT s.book_id, s.current_chapter_index, s.current_offset
                FROM sessions s
-               WHERE s.session_token = ?""",
-            (session_token,)
+               WHERE s.session_token = ? AND s.user_id = ?""",
+            (session_token, user_id)
         )
         session = await cursor.fetchone()
         
@@ -43,8 +46,8 @@ async def get_recap(session_token: str = Query(..., description="Session token")
         # Check cache
         cursor = await db.execute(
             """SELECT llm_response FROM recap_cache
-               WHERE book_id = ? AND chapter_index = ? AND offset_bucket = ?""",
-            (book_id, current_chapter_index, offset_bucket)
+               WHERE user_id = ? AND book_id = ? AND chapter_index = ? AND offset_bucket = ?""",
+            (user_id, book_id, current_chapter_index, offset_bucket)
         )
         cached = await cursor.fetchone()
         
@@ -132,9 +135,9 @@ async def get_recap(session_token: str = Query(..., description="Session token")
         # Cache the result
         await db.execute(
             """INSERT OR REPLACE INTO recap_cache 
-               (book_id, chapter_index, offset_bucket, llm_response)
-               VALUES (?, ?, ?, ?)""",
-            (book_id, current_chapter_index, offset_bucket, recap)
+               (user_id, book_id, chapter_index, offset_bucket, llm_response)
+               VALUES (?, ?, ?, ?, ?)""",
+            (user_id, book_id, current_chapter_index, offset_bucket, recap)
         )
         await db.commit()
         

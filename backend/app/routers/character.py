@@ -12,6 +12,7 @@ router = APIRouter(prefix="/character", tags=["character"])
 @router.get("", response_model=CharacterResponse)
 async def lookup_character(
     session_token: str = Query(..., description="Session token"),
+    user_id: str = Query(..., description="User ID for isolation"),
     name: str = Query(..., description="Character name to look up")
 ):
     """
@@ -37,8 +38,8 @@ async def lookup_character(
             """SELECT s.book_id, s.current_chapter_index, s.current_offset, b.is_indexed
                FROM sessions s
                JOIN books b ON s.book_id = b.id
-               WHERE s.session_token = ?""",
-            (session_token,)
+               WHERE s.session_token = ? AND s.user_id = ?""",
+            (session_token, user_id)
         )
         session = await cursor.fetchone()
         
@@ -65,12 +66,12 @@ async def lookup_character(
         # Query mentions
         cursor = await db.execute(
             """SELECT context_snippet FROM mentions
-               WHERE book_id = ?
+               WHERE user_id = ? AND book_id = ?
                  AND character_name = ?
                  AND ((chapter_index < ?)
                       OR (chapter_index = ? AND offset <= ?))
                ORDER BY chapter_index, offset""",
-            (book_id, normalized_name, current_chapter_index, current_chapter_index, current_offset)
+            (user_id, book_id, normalized_name, current_chapter_index, current_chapter_index, current_offset)
         )
         mentions = await cursor.fetchall()
         
@@ -78,7 +79,7 @@ async def lookup_character(
         
         if not snippets:
             # No mentions found - try fuzzy suggestion
-            suggestion = await _suggest_similar_name(db, book_id, normalized_name)
+            suggestion = await _suggest_similar_name(db, user_id, book_id, normalized_name)
             
             message = f"This character hasn't appeared yet, as far as I can tell up to where you are."
             if suggestion:
@@ -137,13 +138,13 @@ async def lookup_character(
         )
 
 
-async def _suggest_similar_name(db, book_id: int, searched_name: str) -> Optional[str]:
+async def _suggest_similar_name(db, user_id: str, book_id: int, searched_name: str) -> Optional[str]:
     """
     Suggest a similar character name using fuzzy matching.
     """
     cursor = await db.execute(
-        """SELECT DISTINCT character_name FROM mentions WHERE book_id = ?""",
-        (book_id,)
+        """SELECT DISTINCT character_name FROM mentions WHERE user_id = ? AND book_id = ?""",
+        (user_id, book_id)
     )
     names = await cursor.fetchall()
     

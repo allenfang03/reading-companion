@@ -72,6 +72,17 @@ async def index_book_mentions(book_id: int):
     3. Store mentions with context snippets
     """
     async with get_db() as db:
+        # Get user_id for this book
+        cursor = await db.execute(
+            "SELECT user_id FROM books WHERE id = ?",
+            (book_id,)
+        )
+        book = await cursor.fetchone()
+        if not book:
+            print(f"Book {book_id} not found, skipping indexing")
+            return
+        user_id = book['user_id']
+        
         # Get all chapters
         cursor = await db.execute(
             """SELECT chapter_index, text FROM chapters
@@ -126,9 +137,9 @@ async def index_book_mentions(book_id: int):
                         try:
                             await db.execute(
                                 """INSERT OR IGNORE INTO mentions
-                                   (book_id, character_name, chapter_index, offset, context_snippet)
-                                   VALUES (?, ?, ?, ?, ?)""",
-                                (book_id, name.title(), chapter_index, pos, context_snippet)
+                                   (user_id, book_id, character_name, chapter_index, offset, context_snippet)
+                                   VALUES (?, ?, ?, ?, ?, ?)""",
+                                (user_id, book_id, name.title(), chapter_index, pos, context_snippet)
                             )
                         except Exception as e:
                             pass

@@ -1,4 +1,5 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const USER_ID_KEY = 'reading_companion_user_id';
 
 class ApiError extends Error {
   constructor(message, status, data) {
@@ -8,8 +9,35 @@ class ApiError extends Error {
   }
 }
 
+// Generate a UUID v4
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+// Get or create user ID
+export function getUserId() {
+  let userId = localStorage.getItem(USER_ID_KEY);
+  if (!userId) {
+    userId = generateUUID();
+    localStorage.setItem(USER_ID_KEY, userId);
+  }
+  return userId;
+}
+
+// Get user ID from localStorage
+export function getStoredUserId() {
+  return localStorage.getItem(USER_ID_KEY);
+}
+
 async function request(endpoint, options = {}) {
-  const url = `${API_BASE}${endpoint}`;
+  // Always include user_id in requests
+  const userId = getUserId();
+  const separator = endpoint.includes('?') ? '&' : '?';
+  const url = `${API_BASE}${endpoint}${separator}user_id=${encodeURIComponent(userId)}`;
   
   const config = {
     headers: {
@@ -23,8 +51,10 @@ async function request(endpoint, options = {}) {
     config.body = JSON.stringify(options.body);
   }
   
+  // For FormData, body is passed as-is (user_id is in URL query param)
   if (options.body instanceof FormData) {
-    config.body = options.body;
+    // Do not set Content-Type for FormData - browser sets it with boundary
+    delete config.headers['Content-Type'];
   }
   
   try {

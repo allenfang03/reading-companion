@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Query
 from app.database import get_db
 from app.models.schemas import BookUploadResponse, BookListResponse, BookResponse
 from app.services.epub_parser import parse_epub, validate_epub_file
@@ -8,12 +8,22 @@ import aiosqlite
 import uuid
 import os
 import tempfile
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/books", tags=["books"])
 
 
+async def ensure_user_exists(db, user_id: str):
+    """Create user if they don't exist."""
+    await db.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (user_id,))
+    await db.commit()
+
+
 @router.post("/upload", response_model=BookUploadResponse)
 async def upload_book(
+    user_id: str = Query(..., description="User ID for book isolation"),
     file: UploadFile = File(...),
     background_tasks: BackgroundTasks = None
 ):
@@ -62,10 +72,13 @@ async def upload_book(
         
         # Store in database
         async with get_db() as db:
+            # Ensure user exists
+            await ensure_user_exists(db, user_id)
+            
             # Insert book
             cursor = await db.execute(
-                "INSERT INTO books (title, is_indexed) VALUES (?, ?)",
-                (title, False)
+                "INSERT INTO books (user_id, title, is_indexed) VALUES (?, ?, ?)",
+                (user_id, title, False)
             )
             book_id = cursor.lastrowid
             
@@ -120,12 +133,16 @@ async def run_mention_indexing(book_id: int):
 
 
 @router.get("", response_model=BookListResponse)
-async def list_books():
-    """List all books, sorted by creation date (newest first)."""
+async def list_books(
+    user_id: str = Query(..., description="User ID for book isolation")
+):
+    """List all books for a user, sorted by creation date (newest first)."""
     async with get_db() as db:
         cursor = await db.execute(
             """SELECT id, title, is_indexed FROM books 
-               ORDER BY created_at DESC"""
+               WHERE user_id = ?
+               ORDER BY created_at DESC""",
+            (user_id,)
         )
         rows = await cursor.fetchall()
         
